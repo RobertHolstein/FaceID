@@ -1,0 +1,22 @@
+{
+  "name": "faceid",
+  "version": "1.0.0",
+  "description": "AWS facial recognition app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RobertHolstein/FaceID.git"
+  },
+  "author": "Robert Holstein",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RobertHolstein/FaceID/issues"
+  },
+  "homepage": "https://github.com/RobertHolstein/FaceID#readme",
+  "dependencies": {
+    "aws-sdk": "^2.382.0"
+  }
+}
