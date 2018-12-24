@@ -1,4 +1,8 @@
 aws-config.json
+images/
+cropped-images/
+.vscode/
+db.json
 
 # Logs
 logs
@@ -80,3 +84,4 @@ typings/
 
 # DynamoDB Local files
 .dynamodb/
+db.json
