@@ -1,44 +1,15 @@
-//*************************************************
-// Configure environment variables
+const CONST = require('./Const');
 const AWS = require('aws-sdk');
 const fs = require('fs');
 const path = require('path');
 const gm = require('gm');
-const chokidar = require('chokidar');
-const low = require('lowdb')
-const FileSync = require('lowdb/adapters/FileSync')
-const adapter = new FileSync('./db.json')
-const db = low(adapter)
 
-const imageFolder = path.join(__dirname, './images')
-const croppedImageFolder = path.join(__dirname, './cropped-images')
-AWS.config.loadFromPath('./aws-config.json');
-var rekognition = new AWS.Rekognition();
-//*************************************************
-
-var timeOut;
-
-// Check for changes to images foler
-chokidar.watch(imageFolder, {ignoreInitial: true, ignored: /(^|[\/\\])\../}).on('add', (event, path) => {
-    if (!timeOut) {
-        console.log(`New image added to image folder`);
-        timeOut = setTimeout(function() { timeOut=null; ReadFiles(); }, 5000) // give 5 seconds for multiple events
-    }
+AWS.config.loadFromPath(CONST.AWSCONFIG);
+var s3 = new AWS.S3({
+    apiVersion: '2006-03-01',
+    params: {Bucket: CONST.S3BUCKET}
 });
-
-// Read the files in images folder and gather info
-function ReadFiles() {
-    fs.readdir(imageFolder, (err, files) => {
-        if(files.length > 0) {
-            files.forEach(fileName => {
-                var filePath = path.join(imageFolder, `/${fileName}`)
-                var readFile = fs.readFileSync(filePath);
-                var fileObject = { readFile: readFile, filePath: filePath, fileName: fileName }
-                ProcessImage(fileObject);
-            });
-        }
-    })
-}
+var rekognition = new AWS.Rekognition();
 
 // Process the image with aws
 function ProcessImage(fileObject) {
@@ -72,20 +43,20 @@ function CropFacesFromPhotos(FaceDetails = [], fileObject) {
         gm(fileObject.filePath).size(function (err, size) {
             var croppedFileName = `${Math.round(Math.random()*10000)}${fileObject.fileName}`
             this.crop(
-                face.BoundingBox.Width * size.width,
-                face.BoundingBox.Height * size.height,
-                face.BoundingBox.Left * size.width,
-                face.BoundingBox.Top * size.height
+                (face.BoundingBox.Width * size.width) * 1.3,
+                (face.BoundingBox.Height * size.height) * 1.3,
+                (face.BoundingBox.Left * size.width) * .9,
+                (face.BoundingBox.Top * size.height) * .9
             )
-            .write(`${croppedImageFolder}/${croppedFileName}`, function (err) {
+            .write(`${CONST.CROPPEDIMAGEFOLDER}/${croppedFileName}`, function (err) {
                 if (!err) { 
                     facesCropped += 1
-                    console.log(`Face cropped and saved to: ${croppedImageFolder}`);
+                    console.log(`Face cropped and saved to: ${CONST.CROPPEDIMAGEFOLDER}`);
                     if(facesCropped === FaceDetails.length)
                     {
                         DeleteFile(fileObject);
                     }
-                    var filePath = path.join(croppedImageFolder, `/${croppedFileName}`)
+                    var filePath = path.join(CONST.CROPPEDIMAGEFOLDER, `/${croppedFileName}`)
                     CompareFace({ readFile: fs.readFileSync(filePath), filePath: filePath, fileName: croppedFileName });
                 }
                 else  console.log(err);
@@ -130,7 +101,7 @@ var params = {
     CollectionId: "FaceID-collection", 
     ExternalImageId: fileObject.fileName, 
     Image: {
-        Bytes: new Buffer(fileObject.readFile)
+        //Bytes: new Buffer(fileObject.readFile)
     }
 };
    
@@ -146,42 +117,6 @@ rekognition.indexFaces(params, function(err, data) {
 
 //*************************************************
 // Create a database that puts faceids to names
-db.defaults({ person: [{ id: 0, title: "", fullName: "", faceIds: [] }], count: 0 })
-  .write()
-
-addPerson({title: 'robert', fullName: 'robert holstein', faceIds: []})
-
-function addPerson(person) {
-  var userCount =  db.get('count').value();
-  db.get('person')
-  .push({ id: userCount, title: person.title, fullName: person.fullName, faceIds: person.faceIds})
-  .write();
-
-  updateUserCount();
-}
-
-addFaceId(0, "test1")
-addFaceId(0, "test2")
-
-function updateUserCount() {
-    db.update('count', n => n + 1)
-    .write();
-}
-
-function addFaceId(personId, FaceId) {
-    var faceIds = db
-    .get('person')
-    .find({ id: personId })
-    .get('faceIds')
-    .value();
-
-    faceIds.push(FaceId);
-
-    db.get('person')
-    .find({ id: personId })
-    .assign({ faceIds })
-    .write();
-}
 //*************************************************
 
 //*************************************************
@@ -223,7 +158,7 @@ function CompareFace(fileObject) {
     rekognition.searchFacesByImage(params, function(err, data) {
         if (err) console.log(err, err.stack); // an error occurred
         else {
-            DeleteFile(fileObject);
+            //DeleteFile(fileObject);
             console.log(data);  
         }
     });
@@ -235,3 +170,95 @@ function CompareFace(fileObject) {
 // Compare faceid results from searching faces by image to database
 //*************************************************
 
+function AddPhoto(albumName, fileObject) {
+    var albumPhotosKey = encodeURIComponent(albumName) + '//';
+  
+    var photoKey = albumPhotosKey + fileObject.fileName;
+    s3.upload({
+      Key: photoKey,
+      Body: fileObject
+      //ACL: 'public-read'
+    }, function(err, data) {
+      if (err) {
+        alert('There was an error uploading your photo: ', err.message);
+        return
+      }
+      alert('Successfully uploaded photo.');
+      viewAlbum(albumName);
+    });
+}
+
+// Delte photo
+function DeletePhoto(albumName, photoKey) {
+    s3.deleteObject({Key: photoKey}, function(err, data) {
+    if (err) {
+        return alert('There was an error deleting your photo: ', err.message);
+        }
+        alert('Successfully deleted photo.');
+        viewAlbum(albumName);
+    });
+}
+
+
+
+function CreateAlbum(albumName) {
+    albumName = albumName.trim();
+    if (!albumName) {
+        console.error('Album names must contain at least one non-space character.');
+        return;
+    }
+    if (albumName.indexOf('/') !== -1) {
+        console.error('Album names cannot contain slashes.');
+        return;
+    }
+    var albumKey = encodeURIComponent(albumName) + '/';
+    s3.headObject({Key: albumKey}, function(err, data) {
+      if (!err) {
+        console.error(`${albumKey} already exists`);
+        return;
+      }
+      if (err.code !== 'NotFound') {
+        console.error('There was an error creating your album: ' + err.message);
+        return;
+      }
+      s3.putObject({Key: albumKey}, function(err, data) {
+        if (err) {
+          console.error('There was an error creating your album: ' + err.message);
+        } else {
+            console.log('Successfully created album.');
+            viewAlbum(albumName);
+        }
+      });
+    });
+}
+
+function ViewAlbum(albumName) {
+    var albumPhotosKey = encodeURIComponent(albumName) + '/';
+    s3.listObjects({Prefix: albumPhotosKey}, function(err, data) {
+        if (err) {
+            console.error('There was an error viewing your album: ' + err.message);
+            return;
+        }
+        // `this` references the AWS.Response instance that represents the response
+        var href = this.request.httpRequest.endpoint.href;
+        var bucketUrl = href + CONST.S3BUCKET + '/';
+  
+        var photos = data.Contents.map(function(photo) {
+            var photoKey = photo.Key;
+            var photoUrl = bucketUrl + encodeURIComponent(photoKey);
+            console.log(photoUrl);
+        });
+    });
+}
+
+module.exports = {
+    ProcessImage: ProcessImage,
+    CropFacesFromPhotos: CropFacesFromPhotos,
+    DeleteFile: DeleteFile,
+    IndexFace: IndexFace,
+    CompareFace: CompareFace,
+    AddPhoto: AddPhoto,
+    DeletePhoto, DeletePhoto,
+    CreateAlbum: CreateAlbum,
+    ViewAlbum: ViewAlbum
+}
