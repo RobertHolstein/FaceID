@@ -4,36 +4,59 @@ const FileSync = require('lowdb/adapters/FileSync');
 const adapter = new FileSync(CONST.JSONDB);
 const db = low(adapter);
 
-db.defaults({ person: [{ id: 0, title: "", fullName: "", faceIds: [] }], count: 0 })
+db.defaults({ person: [{ id: 0, firstName: "", fullName: "", photos: [] }], count: 0 })
   .write()
 
-addPerson({title: 'robert', fullName: 'robert holstein', faceIds: []})
-
-function addPerson(person) {
-  var userCount =  db.get('count').value();
+function AddPerson(person) {
+  var userCount =  db.get('count').value(); // string or number?
   db.get('person')
-  .push({ id: userCount, title: person.title, fullName: person.fullName, faceIds: person.faceIds})
+  .push({ id: userCount + 1, firstName: person.firstName, fullName: person.fullName, photos: person.photos})
   .write();
 
-  updateUserCount();
+  UpdateUserCount();
 }
 
-function updateUserCount() {
+function UpdateUserCount() {
     db.update('count', n => n + 1)
     .write();
 }
 
-function addFaceId(personId, FaceId) {
-    var faceIds = db
+function AddPhotoById(personId, photoInfo) {
+    var photos = db
     .get('person')
     .find({ id: personId })
-    .get('faceIds')
+    .get('photos')
     .value();
 
-    faceIds.push(FaceId);
+    photos.push(photoInfo);
 
     db.get('person')
     .find({ id: personId })
-    .assign({ faceIds })
+    .assign({ photos })
     .write();
+
+    console.log(`${photoInfo.name} added to user ${personId}'s photos`)
+}
+
+function AddPhotoByName(personFirstName, photosInfo) {
+    var photos = db
+    .get('person')
+    .find({ firstName: personFirstName })
+    .get('photos')
+    .value();
+
+    photos.push(photosInfo);
+
+    db.get('person')
+    .find({ id: personId })
+    .assign({ photos })
+    .write();
+}
+
+module.exports = {
+    AddPerson: AddPerson,
+    UpdateUserCount: UpdateUserCount,
+    AddPhotoById: AddPhotoById,
+    AddPhotoByName: AddPhotoByName,
+    db:db
 }

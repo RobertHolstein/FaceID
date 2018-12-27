@@ -1,11 +1,18 @@
 // Configure environment variables
-var CONST = require('./Const');
+const CONST = require('./Const');
 const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
-var FaceID = require("./FaceID");
+const FaceID = require("./FaceID");
+const faceIdDb = require('./database/db')
+const db = faceIdDb.db;
+const dbTest = require('./tests/db-Test')
 
 WatchImageFolder();
+
+
+
+//dbTest.StartTest();
 
 // Check for changes to images foler
 function WatchImageFolder() {

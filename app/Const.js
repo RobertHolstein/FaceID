@@ -4,6 +4,7 @@ const CROPPEDIMAGEFOLDER = path.join(__dirname, '../cropped-images');
 const JSONDB = path.join(__dirname, './database/db.json');
 const AWSCONFIG = path.join(__dirname, '../aws-config.json');
 const S3BUCKET = "faceid-bucket";
+const FACEIDCOLLECTION = "FaceID-collection";
 
 module.exports = {
     IMAGEFOLDER: IMAGEFOLDER,
@@ -11,5 +12,6 @@ module.exports = {
     JSONDB: JSONDB,
     AWSCONFIG: AWSCONFIG,
     S3BUCKET: S3BUCKET,
+    FACEIDCOLLECTION: FACEIDCOLLECTION
 };
  
