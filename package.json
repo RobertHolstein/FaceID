@@ -4,7 +4,7 @@
   "description": "AWS facial recognition app",
   "main": "index.js",
   "scripts": {
-    "standard": "standard"
+    "standard": "standard --fix"
   },
   "repository": {
     "type": "git",
