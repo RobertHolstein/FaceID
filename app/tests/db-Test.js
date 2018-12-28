@@ -7,11 +7,12 @@ function StartTest () {
 }
 
 function TestAddUser () {
-  faceIdDb.AddPerson({ title: 'robert', fullName: 'robert holstein', photos: [] })
-  faceIdDb.AddPerson({ title: 'courtney', fullName: 'courtney rude', photos: [] })
-  faceIdDb.AddPerson({ title: 'shio', fullName: 'robert holstein', photos: [] })
-  var person = db.get('person').find(i => i.title === 'robert').value()
-  faceId.CreateAlbum(person.title)
+  faceIdDb.AddPerson({ firstName: 'robert', fullName: 'robert holstein', photos: [] })
+  faceIdDb.AddPerson({ firstName: 'courtney', fullName: 'courtney rude', photos: [] })
+  faceIdDb.AddPerson({ firstName: 'shilo', fullName: 'shilo rude', photos: [] })
+  faceIdDb.AddPerson({ firstName: 'audrey', fullName: 'audrey rude', photos: [] })
+  //var person = db.get('person').find(i => i.title === 'robert').value()
+  //faceId.CreateAlbum(person.title)
 }
 
 module.exports = {

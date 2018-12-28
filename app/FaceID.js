@@ -11,7 +11,22 @@ var s3 = new AWS.S3({
   apiVersion: '2006-03-01',
   params: { Bucket: CONST.S3BUCKET }
 })
-var rekognition = new AWS.Rekognition()
+const rekognition = new AWS.Rekognition()
+const ddb = new AWS.DynamoDB.DocumentClient();
+
+function GetAllPersons(){
+  var params = {
+    TableName: 'person'
+  }
+
+  ddb.scan(params, function(err, data) {
+    if (err) {
+      console.log("Error", err);
+    } else {
+      console.log("Success", data);
+    }
+  });
+}
 
 function ProcessImage (fileObject) {
   GetFacesFromImage(fileObject, function (faceDetails) {
@@ -32,15 +47,12 @@ function ProcessImage (fileObject) {
             console.log(`This person is ${personsMatched[0].fullName}`)
             if (faceMatches.filter(i => i.Similarity > 90).length === 5) {                                              // If all photos were over 90% similarity add to face index
               console.log(`five matches for ${personsMatched[0].fullName} over 90% similarity. Adding to face index.`)
-              UploadPhoto(personsMatched[0].firstName, croppedFileObject, function (data) {
+              AddPhotoToAlbum(personsMatched[0].firstName, croppedFileObject, function (err, data) {
                 if (data) {
-                  DeleteFile(croppedFileObject)                                                                         // Cropped photo has been upload it. Delete
-                  var photoKey = `${personsMatched[0].firstName}/${croppedFileObject.fileName}`
-                  var photoUrl = data.Location                                                                          // `this` references the AWS.Response instance that represents the response
-                  var photoInfo = { key: photoKey, url: photoUrl, name: croppedFileObject.fileName, album: personsMatched[0].firstName }
-                  faceIdDb.AddPhotoById(personsMatched[0].id, photoInfo)
-                  IndexFace(photoInfo, function (data) {
+                  faceIdDb.AddPhotoById(personsMatched[0].id, data)
+                  IndexFace(data, function (data) {
                     console.log(`${personsMatched[0].fullName}'s face has been indexed`)
+                    DeleteFile(croppedFileObject)                                                                         // Cropped photo has been upload it. Delete
                   })
                 }
               })
@@ -72,7 +84,7 @@ function GetFacesFromImage (fileObject, callback) {
       if (goodFaces.length > 0) {
         callback(goodFaces)
       } else {
-        console.error(`No faces found in ${fileObject.fileName}`)
+        console.error(`No faces found in ${fileObject.name}`)
         DeleteFile(fileObject)
       }
     }
@@ -83,10 +95,10 @@ function GetFacesFromImage (fileObject, callback) {
 function CropFacesFromPhoto (FaceDetails = [], fileObject, callback) {
   var facesCropped = 0
   var croppedFacesFiles = []
-  console.log(`cropping ${FaceDetails.length} faces from image ${fileObject.fileName}`)
+  console.log(`cropping ${FaceDetails.length} faces from image ${fileObject.name}`)
   FaceDetails.forEach(face => {
-    gm(fileObject.filePath).size(function (err, size) {
-      var croppedFileName = `${Math.round(Math.random() * 10000)}${fileObject.fileName}`
+    gm(fileObject.path).size(function (err, size) {
+      var croppedFileName = `${Math.round(Math.random() * 10000)}${fileObject.name}`
       this.crop(
         (face.BoundingBox.Width * size.width) * 1.3,
         (face.BoundingBox.Height * size.height) * 1.3,
@@ -98,7 +110,7 @@ function CropFacesFromPhoto (FaceDetails = [], fileObject, callback) {
             facesCropped += 1
             console.log(`Face cropped and saved to: ${CONST.CROPPEDIMAGEFOLDER}`)
             var filePath = path.join(CONST.CROPPEDIMAGEFOLDER, `/${croppedFileName}`)
-            croppedFacesFiles.push({ readFile: fs.readFileSync(filePath), filePath: filePath, fileName: croppedFileName })
+            croppedFacesFiles.push({ readFile: fs.readFileSync(filePath), path: filePath, name: croppedFileName })
             if (facesCropped === FaceDetails.length) {
               DeleteFile(fileObject)
               callback(croppedFacesFiles)
@@ -110,8 +122,8 @@ function CropFacesFromPhoto (FaceDetails = [], fileObject, callback) {
 }
 
 function CropFaceFromPhoto (FaceDetail, fileObject, callback) {
-  gm(fileObject.filePath).size(function (err, size) {
-    var croppedFileName = `${Math.round(Math.random() * 10000)}${fileObject.fileName}`
+  gm(fileObject.path).size(function (err, size) {
+    var croppedFileName = `${Math.round(Math.random() * 10000)}${fileObject.name}`
     this.crop(
       (FaceDetail.BoundingBox.Width * size.width) * 1.3,
       (FaceDetail.BoundingBox.Height * size.height) * 1.3,
@@ -122,17 +134,17 @@ function CropFaceFromPhoto (FaceDetail, fileObject, callback) {
         if (!err) {
           console.log(`Face cropped and saved to: ${CONST.CROPPEDIMAGEFOLDER}`)
           var filePath = path.join(CONST.CROPPEDIMAGEFOLDER, `/${croppedFileName}`)
-          callback({ readFile: fs.readFileSync(filePath), filePath: filePath, fileName: croppedFileName })
+          callback({ readFile: fs.readFileSync(filePath), path: filePath, name: croppedFileName })
         } else console.error(err)
       })
   })
 }
 
 function DeleteFile (fileObject) {
-  fs.unlink(fileObject.filePath, function (err) {
+  fs.unlink(fileObject.path, function (err) {
     if (err) throw err
     // if no error, file has been deleted successfully
-    console.log(`File ${fileObject.fileName} deleted!`)
+    console.log(`File ${fileObject.name} deleted!`)
   })
 }
 
@@ -158,7 +170,24 @@ function DeleteFile (fileObject) {
 //      else     console.log(data);
 // });
 
-function IndexFace (photoInfo, callback) {
+function IndexFace (fileObject, callback) {
+  var params = {
+    CollectionId: CONST.FACEIDCOLLECTION,
+    ExternalImageId: fileObject.name,
+    Image: {
+      Bytes: new Buffer(fileObject.readFile)
+    }
+  }
+
+  rekognition.indexFaces(params, function (err, data) {
+    if (err) console.log(err, err.stack) // an error occurred
+    else {
+      callback(data.FaceRecords[0].Face)
+    }
+  })
+}
+
+function IndexFaceInBucket (photoInfo, callback) {
   var params = {
     CollectionId: CONST.FACEIDCOLLECTION,
     ExternalImageId: photoInfo.name,
@@ -231,7 +260,7 @@ function CompareFace (fileObject, callback) {
 
 //* ************************************************
 
-function IndexAlbumPhotos () {
+function IndexAlbumPhotosOnAWS () {
   ListAlbums(function (data) {
     data.forEach(album => {
       ViewAlbum(album.slice(0, -1), function (data) {
@@ -249,10 +278,29 @@ function IndexAlbumPhotos () {
   })
 }
 
+function IndexAlbumPhotos () {
+  fs.readdir(CONST.REFIMAGEFOLDER, function (err, folders) {
+    folders.forEach(folder => {
+    var person = db.get('person').find(i => i.firstName === folder).value()
+      fs.readdir(`${CONST.REFIMAGEFOLDER}/${folder}`, function (err, files) {
+        files.forEach(file => {  
+          var filePath = path.join(`${CONST.REFIMAGEFOLDER}/${folder}`, `/${file}`)
+          var readFile = fs.readFileSync(filePath)
+          var fileObject = { readFile: readFile, path: filePath, name: file }
+          IndexFace(fileObject, function (data) {
+            faceIdDb.AddPhotoById(person.id, fileObject)
+            console.log(`${data.ExternalImageId} has been indexed`)
+          })
+        })
+      })
+    });
+  })
+}
+
 function UploadPhoto (albumName, fileObject, callback) {
   var albumPhotosKey = encodeURIComponent(albumName) + '/'
 
-  var photoKey = albumPhotosKey + fileObject.fileName
+  var photoKey = albumPhotosKey + fileObject.name
   s3.upload({
     Key: photoKey,
     Body: new Buffer(fileObject.readFile),
@@ -264,6 +312,18 @@ function UploadPhoto (albumName, fileObject, callback) {
     } else {
       console.log('Successfully uploaded photo.')
       callback(data)
+    }
+  })
+}
+
+function AddPhotoToAlbum (albumName, fileObject, callback) {
+  var newFilePath = `${CONST.REFIMAGEFOLDER}/${albumName}/${fileObject.name}`
+  fs.copyFile(fileObject.path, newFilePath, function (err) {
+    if (err) {
+      console.error("error copying file", err)
+      callback(err, null)
+    } else {
+      callback( null, { readFile: fs.readFileSync(newFilePath), name: fileObject.name, path: newFilePath })
     }
   })
 }
@@ -361,5 +421,6 @@ module.exports = {
   CreateAlbum: CreateAlbum,
   ViewAlbum: ViewAlbum,
   ListAlbums: ListAlbums,
-  IndexAlbumPhotos: IndexAlbumPhotos
+  IndexAlbumPhotos: IndexAlbumPhotos,
+  GetAllPersons: GetAllPersons
 }

@@ -3,6 +3,7 @@ images/
 cropped-images/
 .vscode/
 db.json
+ref-images/
 
 # Logs
 logs

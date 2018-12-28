@@ -9,8 +9,10 @@ const db = faceIdDb.db
 const dbTest = require('./tests/db-Test')
 
 WatchImageFolder()
+//dbTest.StartTest();
 
-// dbTest.StartTest();
+//FaceID.IndexAlbumPhotos();
+
 
 // Check for changes to images foler
 function WatchImageFolder () {
@@ -30,7 +32,7 @@ function ReadFiles () {
       files.forEach(fileName => {
         var filePath = path.join(CONST.IMAGEFOLDER, `/${fileName}`)
         var readFile = fs.readFileSync(filePath)
-        var fileObject = { readFile: readFile, filePath: filePath, fileName: fileName }
+        var fileObject = { readFile: readFile, path: filePath, name: fileName }
         FaceID.ProcessImage(fileObject)
       })
     }

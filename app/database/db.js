@@ -28,7 +28,7 @@ function AddPhotoById (personId, photoInfo) {
     .get('photos')
     .value()
 
-  photos.push(photoInfo)
+  photos.push({ name: photoInfo.name, path: photoInfo.path })
 
   db.get('person')
     .find({ id: personId })
